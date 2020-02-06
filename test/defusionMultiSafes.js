@@ -70,12 +70,10 @@ contract('GnosisSafe', function(accounts) {
     it('Use many safes with dfusion', async () => {
         const masterSafe = await deploySafe([lw.accounts[0], lw.accounts[1]], 2)
         console.log("Master Safe", masterSafe.address)
+        await testToken.transfer(masterSafe.address, 10000)
         const slaveSafes = []
         for (let i = 0; i < 40; i++) {
             const newSafe = await deploySafe([masterSafe.address], 1)
-            console.log("Slave Safe", newSafe.address)
-            await testToken.transfer(newSafe.address, 10 + i)
-            console.log(await testToken.balanceOf(newSafe.address))
             slaveSafes.push(newSafe.address)
         }
         console.log("Slave Safes", slaveSafes)
@@ -83,22 +81,29 @@ contract('GnosisSafe', function(accounts) {
         for (let index = 0; index < slaveSafes.length; index++) {
             const slaveSafe = slaveSafes[index]
             const tokenAmount = index + 2
+            // Get data to move funds from master to slave
             const transferData = await testToken.contract.methods.transfer(slaveSafe, tokenAmount).encodeABI()
             transactions.push({operation: 0, to: testToken.address, value: 0, data: transferData})
+            // Get data to approve funds from slave to exchange
             const approveData = await testToken.contract.methods.approve(testExchange.address, tokenAmount).encodeABI()
+            // Get data to deposit funds from slave to exchange
             const depositData = await testExchange.contract.methods.deposit(tokenAmount).encodeABI()
+            // Get data for approve and deposit multisend on slave
             const multiSendData = await encodeMultiSend([
                 {operation: 0, to: testToken.address, value: 0, data: approveData},
                 {operation: 0, to: testExchange.address, value: 0, data: depositData}
             ])
+            // Get data to execute approve/deposit multisend via slave
             const execData = await execTransactionData(masterSafe.address, multiSend.address, 0, multiSendData, 1)
             transactions.push({operation: 0, to: slaveSafe, value: 0, data: execData})
         }
+        // Get data to execute all fund/approve/deposit transactions at once
         const finalData = await encodeMultiSend(transactions)
         await execTransaction(masterSafe, multiSend.address, 0, finalData, 1, "deposit for all slaves")
         for (let index = 0; index < slaveSafes.length; index++) {
             const slaveSafe = slaveSafes[index]
             console.log("Slave", index, "(", slaveSafe, ") deposit:", await testExchange.deposits(slaveSafe))
+            // This should always output 0 as the slaves should never directly hold funds
             console.log("Slave", index, "(", slaveSafe, ") balance:", await testToken.balanceOf(slaveSafe))
         }
     })
