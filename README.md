@@ -5,3 +5,6 @@ This test creates multiple Safes owned by a master Safe, funds them with some to
 ### Testing it
 - `npm install`
 - `npm test`
+
+### Notes
+Currently this process can not be done via the web interface (gnosis-safe.io) as the interface does not allow to create `delegatecall` transactions, which is required to trigger multisend (batching transactions).
